@@ -194,8 +194,49 @@ int head_update(const ObjectID *new_commit) {
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
-    return -1;
+
+    Commit commit;
+
+    // Step 1: create tree
+    if (tree_from_index(&commit.tree) != 0) {
+        return -1;
+    }
+
+    // Step 2: parent commit (HEAD)
+    ObjectID parent_id;
+    if (head_read(&parent_id) == 0) {
+        commit.parent = parent_id;
+        commit.has_parent = 1;
+    } else {
+        commit.has_parent = 0;
+    }
+
+    // Step 3: author + timestamp
+    snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
+    commit.timestamp = (uint64_t)time(NULL);
+
+    // Step 4: message
+    snprintf(commit.message, sizeof(commit.message), "%s", message);
+
+    // Step 5: serialize
+    void *data;
+    size_t len;
+    if (commit_serialize(&commit, &data, &len) != 0) {
+        return -1;
+    }
+
+    // Step 6: write object
+    if (object_write(OBJ_COMMIT, data, len, commit_id_out) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+
+    // Step 7: update HEAD
+    if (head_update(commit_id_out) != 0) {
+        return -1;
+    }
+
+    return 0;
 }

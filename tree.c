@@ -1,21 +1,23 @@
 // tree.c — Tree object serialization and construction
 //
 // PROVIDED functions: get_file_mode, tree_parse, tree_serialize
-// TODO functions:     tree_from_index
+// TODO functions:    tree_from_index
 //
 // Binary tree format (per entry, concatenated with no separators):
 //   "<mode-as-ascii-octal> <name>\0<32-byte-binary-hash>"
 //
 // Example single entry (conceptual):
 //   "100644 hello.txt\0" followed by 32 raw bytes of SHA-256
-
 #include "tree.h"
+#include "index.h"
+#include "pes.h"
+#include "object.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
 #include <sys/stat.h>
-
+#include <unistd.h>
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
 #define MODE_FILE      0100644
@@ -130,8 +132,37 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
-    (void)id_out;
-    return -1;
+
+    Index index;
+
+    if (index_load(&index) != 0) return -1;
+
+    Tree tree;
+    tree.count = 0;
+
+    for (int i = 0; i < index.count; i++) {
+
+        IndexEntry *entry = &index.entries[i];
+        TreeEntry *tentry = &tree.entries[tree.count++];
+
+        tentry->mode = 0100644;
+
+        const char *name = strrchr(entry->path, '/');
+        if (name) name++;
+        else name = entry->path;
+
+        strcpy(tentry->name, name);
+
+        memcpy(tentry->hash.hash, entry->hash.hash, HASH_SIZE);
+    }
+
+    void *data;
+    size_t len;
+
+    if (tree_serialize(&tree, &data, &len) != 0) return -1;
+
+    int res = object_write(OBJ_TREE, data, len, id_out);
+
+    free(data);
+    return res;
 }
